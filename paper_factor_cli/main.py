@@ -54,6 +54,37 @@ def _auto_init_workspace(*, download_missing: bool = False) -> None:
         validate_workspace_ready(require_factor_data=True)
 
 
+def _env_flag(name: str, default: bool = True) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _run_post_factor_analysis(
+    *,
+    post_analyze: bool,
+    post_analyze_agent: bool,
+    accepted_only: bool,
+    barra_model: str,
+    barra_dir: Optional[str],
+    data_type: str,
+) -> None:
+    if not post_analyze:
+        return
+    from rdagent.app.qlib_rd_loop.factor_portfolio_analyze import run_post_export_analysis
+
+    run_post_export_analysis(
+        accepted_only=accepted_only,
+        data_type=data_type,
+        barra_model=barra_model,
+        with_agent=post_analyze_agent,
+        barra_dir=barra_dir,
+        allow_empty=True,
+        echo_summary=True,
+    )
+
+
 @app.command(name="run")
 def run_paper_factor(
     report_folder: str = typer.Option(DEFAULT_PAPER_REPORT_FOLDER, help="Folder containing PDF factor reports."),
@@ -76,6 +107,24 @@ def run_paper_factor(
         "--extract-only/--run-full-pipeline",
         help="Only read report and extract factor info without coding/evaluation/export.",
     ),
+    post_analyze: bool = typer.Option(
+        _env_flag("PAPER_FACTOR_POST_ANALYZE", True),
+        "--post-analyze/--no-post-analyze",
+        help="After pipeline, run IC/Barra batch analysis on exported factors.",
+    ),
+    post_analyze_agent: bool = typer.Option(
+        _env_flag("PAPER_FACTOR_POST_ANALYZE_AGENT", True),
+        "--post-analyze-agent/--no-post-analyze-agent",
+        help="After metrics+Barra, run LLM optimization agent (uses API tokens).",
+    ),
+    analyze_accepted_only: bool = typer.Option(
+        False,
+        "--analyze-accepted-only/--analyze-all-exported",
+        help="Post-analyze only accepted factors (default: all exported parquet).",
+    ),
+    barra_model: str = typer.Option("trading", "--barra-model", help="Barra CSV set for post-analyze."),
+    barra_dir: Optional[str] = typer.Option(None, "--barra-dir", help="Override Barra model directory."),
+    analyze_data_type: str = typer.Option("All", "--analyze-data-type", help="All or Debug for IC labels."),
 ) -> None:
     _auto_init_workspace(download_missing=False)
     normalized_report_file = str(Path(report_file).resolve()) if report_file else None
@@ -107,6 +156,15 @@ def run_paper_factor(
                 checkout=checkout,
                 minimal_mode=minimal_mode,
             )
+            if not extract_only:
+                _run_post_factor_analysis(
+                    post_analyze=post_analyze,
+                    post_analyze_agent=post_analyze_agent,
+                    accepted_only=analyze_accepted_only,
+                    barra_model=barra_model,
+                    barra_dir=barra_dir,
+                    data_type=analyze_data_type,
+                )
             return
 
         if normalized_report_file:
@@ -125,6 +183,15 @@ def run_paper_factor(
                 report_paths=[normalized_report_file],
             )
             typer.echo("paper_factor finished after processing 1 paper.")
+            if not extract_only:
+                _run_post_factor_analysis(
+                    post_analyze=post_analyze,
+                    post_analyze_agent=post_analyze_agent,
+                    accepted_only=analyze_accepted_only,
+                    barra_model=barra_model,
+                    barra_dir=barra_dir,
+                    data_type=analyze_data_type,
+                )
             return
 
         processed_count = 0
@@ -148,6 +215,15 @@ def run_paper_factor(
             typer.echo("No unprocessed papers found in the report folder.")
 
     typer.echo(f"paper_factor finished after processing {processed_count} paper(s).")
+    if not extract_only:
+        _run_post_factor_analysis(
+            post_analyze=post_analyze,
+            post_analyze_agent=post_analyze_agent,
+            accepted_only=analyze_accepted_only,
+            barra_model=barra_model,
+            barra_dir=barra_dir,
+            data_type=analyze_data_type,
+        )
 
 
 @app.command(name="start")
@@ -166,6 +242,23 @@ def start_paper_factor(
         help="Use the lowest-cost extraction path by skipping report classification and extra hypothesis generation.",
     ),
     llm_max_retry: int = typer.Option(1, "--llm-max-retry", min=1),
+    post_analyze: bool = typer.Option(
+        _env_flag("PAPER_FACTOR_POST_ANALYZE", True),
+        "--post-analyze/--no-post-analyze",
+        help="After start finishes, auto-run factor metrics + Barra analysis.",
+    ),
+    post_analyze_agent: bool = typer.Option(
+        _env_flag("PAPER_FACTOR_POST_ANALYZE_AGENT", True),
+        "--post-analyze-agent/--no-post-analyze-agent",
+        help="Also run LLM optimization agent after post-analyze.",
+    ),
+    analyze_accepted_only: bool = typer.Option(
+        False,
+        "--analyze-accepted-only/--analyze-all-exported",
+    ),
+    barra_model: str = typer.Option("trading", "--barra-model"),
+    barra_dir: Optional[str] = typer.Option(None, "--barra-dir"),
+    analyze_data_type: str = typer.Option("All", "--analyze-data-type"),
 ) -> None:
     with _temporary_env(
         DS_CODER_COSTEER_ENV_TYPE="docker",
@@ -180,6 +273,12 @@ def start_paper_factor(
             llm_max_retry=llm_max_retry,
             max_factors_per_paper=10,
             extract_only=False,
+            post_analyze=post_analyze,
+            post_analyze_agent=post_analyze_agent,
+            analyze_accepted_only=analyze_accepted_only,
+            barra_model=barra_model,
+            barra_dir=barra_dir,
+            analyze_data_type=analyze_data_type,
         )
 
 
@@ -205,6 +304,66 @@ def init_workspace(force: bool = typer.Option(False, help="Overwrite existing lo
     typer.echo(f"Env: {summary['env']}")
     for item in summary["data"]:
         typer.echo(f"- {item}")
+
+
+@app.command(name="analyze")
+def analyze_factors(
+    accepted_only: bool = typer.Option(
+        False,
+        "--accepted-only/--all-exported",
+        help="Only analyze factors marked accepted in metadata.",
+    ),
+    data_type: str = typer.Option(
+        "All",
+        "--data-type",
+        help="Use All (full sample) or Debug data folder for IC/label evaluation.",
+    ),
+    barra_model: str = typer.Option(
+        "trading",
+        "--barra-model",
+        help="Barra CSV bundle: trading | long_term_stable",
+    ),
+    barra_dir: Optional[str] = typer.Option(
+        None,
+        help="Override Barra CSV directory (default: git_ignore_folder/barra_model).",
+    ),
+    with_agent: bool = typer.Option(
+        True,
+        "--with-agent/--metrics-only",
+        help="Run LLM agent for optimization suggestions after metrics + Barra.",
+    ),
+    setup_barra: bool = typer.Option(
+        False,
+        "--setup-barra",
+        help="Copy Desktop Barra模型 CSVs into git_ignore_folder/barra_model before analyze.",
+    ),
+) -> None:
+    """Evaluate exported factors (IC/IR/RankIC/long-short/turnover/etc.) + Barra + agent advice."""
+    _auto_init_workspace(download_missing=False)
+    if setup_barra:
+        import subprocess
+
+        script = Path.cwd() / "scripts" / "setup_barra_model.sh"
+        if script.exists():
+            subprocess.run(["bash", str(script)], check=False)
+        else:
+            typer.echo("setup_barra_model.sh not found; skip Barra copy.")
+
+    from rdagent.app.qlib_rd_loop.factor_portfolio_analyze import run_post_export_analysis
+
+    try:
+        run_post_export_analysis(
+            accepted_only=accepted_only,
+            data_type=data_type,
+            barra_model=barra_model,
+            with_agent=with_agent,
+            barra_dir=barra_dir,
+            allow_empty=False,
+            echo_summary=True,
+        )
+    except RuntimeError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1) from exc
 
 
 def main() -> None:
