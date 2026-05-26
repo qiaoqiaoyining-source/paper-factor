@@ -284,3 +284,47 @@ def save_barra_sidecar(path: Path, payload: dict[str, Any]) -> Path:
     out = path.with_suffix(".barra.json")
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return out
+
+
+def analyze_factor_barra_full(
+    factor_df: pd.DataFrame,
+    *,
+    barra_dir: Path | None = None,
+    model: str = "trading",
+    data_type: str = "All",
+    top_frac: float = 0.2,
+    bottom_frac: float = 0.2,
+) -> dict[str, Any]:
+    """Style exposure diagnostics + full return/risk Barra attribution."""
+    from rdagent.scenarios.qlib.developer.barra_attribution import (
+        analyze_factor_barra_attribution,
+        attribution_summary_markdown,
+    )
+
+    exposure_diag = analyze_factor_barra_exposure(
+        factor_df,
+        barra_dir=barra_dir,
+        model=model,
+        top_frac=top_frac,
+        bottom_frac=bottom_frac,
+    )
+    return_attrib = analyze_factor_barra_attribution(
+        factor_df,
+        barra_dir=barra_dir,
+        model=model,
+        data_type=data_type,
+        top_frac=top_frac,
+        bottom_frac=bottom_frac,
+    )
+    return {
+        "status": "ok" if exposure_diag.get("status") == "ok" or return_attrib.get("status") == "ok" else "partial",
+        "barra_model": model,
+        "exposure_diagnostics": exposure_diag,
+        "return_risk_attribution": return_attrib,
+        "summary_markdown": "\n\n".join(
+            [
+                barra_summary_markdown(exposure_diag),
+                attribution_summary_markdown(return_attrib),
+            ]
+        ),
+    }

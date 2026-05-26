@@ -20,8 +20,7 @@ from rdagent.components.coder.factor_coder.eva_utils import (
 from rdagent.log import rdagent_logger as logger
 from rdagent.oai.llm_utils import APIBackend
 from rdagent.scenarios.qlib.developer.barra_analysis import (
-    analyze_factor_barra_exposure,
-    barra_summary_markdown,
+    analyze_factor_barra_full,
     list_barra_models,
     resolve_barra_dir,
 )
@@ -72,7 +71,12 @@ def _analyze_single_factor(
 
     barra: dict[str, Any]
     try:
-        barra = analyze_factor_barra_exposure(df, barra_dir=barra_dir, model=barra_model)
+        barra = analyze_factor_barra_full(
+            df,
+            barra_dir=barra_dir,
+            model=barra_model,
+            data_type=data_type,
+        )
     except Exception as exc:  # noqa: BLE001
         barra = {"status": "error", "reason": str(exc)}
 
@@ -89,7 +93,7 @@ def _analyze_single_factor(
         "metrics_feedback": metrics_feedback,
         "evaluation_feedback": feedback,
         "barra": barra,
-        "barra_summary": barra_summary_markdown(barra),
+        "barra_summary": barra.get("summary_markdown") if isinstance(barra, dict) else "",
         "analyzed_at": datetime.now().isoformat(timespec="seconds"),
     }
 
@@ -154,6 +158,15 @@ def run_factor_batch_analysis(
                 "top_bottom_turnover_mean": (r.get("metrics") or {}).get("top_bottom_turnover_mean"),
                 "ic_positive_hit_rate": (r.get("metrics") or {}).get("ic_positive_hit_rate"),
                 "barra_status": (r.get("barra") or {}).get("status"),
+                "barra_attrib_status": ((r.get("barra") or {}).get("return_risk_attribution") or {}).get(
+                    "status"
+                ),
+                "mean_daily_factor_contrib": (
+                    (r.get("barra") or {}).get("return_risk_attribution") or {}
+                ).get("mean_daily_factor_contrib"),
+                "mean_daily_specific_contrib": (
+                    (r.get("barra") or {}).get("return_risk_attribution") or {}
+                ).get("mean_daily_specific_contrib"),
                 "analysis_path": str(ANALYSIS_DIR / f"{r.get('factor_name')}.analysis.json"),
             }
             for r in results
@@ -191,14 +204,16 @@ def run_factor_optimization_agent(
                 "accepted": row.get("accepted"),
                 "metrics": detail.get("metrics") or {},
                 "barra": detail.get("barra") or {},
+                "barra_return_attribution": (detail.get("barra") or {}).get("return_risk_attribution"),
                 "logic_summary": detail.get("metrics_feedback"),
                 "source_report_title": detail.get("source_report_title"),
             }
         )
 
     system_prompt = (
-        "你是量化因子优化顾问。根据因子的 IC/RankIC/IR、多空收益、换手、Barra 风格暴露，"
-        "给出可执行的优化建议：公式调整、中性化、平滑、换手控制、与 Barra 风格去相关等。"
+        "你是量化因子优化顾问。根据因子的 IC/RankIC/IR、多空收益、换手、Barra 风格暴露诊断，"
+        "以及 Barra 全量收益归因（风格+行业因子收益、特质收益、残差）和风险归因（因子协方差 vs 特质风险），"
+        "给出可执行的优化建议：公式调整、中性化、平滑、换手控制、与 Barra 风格/行业去相关等。"
         "输出 JSON："
         '{"overall_summary":"...", "factor_recommendations":[{"factor_name":"...", "priority":"high|medium|low", '
         '"issues":["..."], "actions":["..."], "barra_notes":"..."}]}'
@@ -292,7 +307,10 @@ def run_post_export_analysis(
     """
     resolved = Path(barra_dir) if barra_dir else None
     if echo_summary:
-        print("paper_factor: running factor analysis (IC/RankIC/long-short/turnover + Barra)...", flush=True)
+        print(
+            "paper_factor: running factor analysis (IC/RankIC/long-short/turnover + Barra full attribution)...",
+            flush=True,
+        )
     summary = run_factor_batch_analysis(
         accepted_only=accepted_only,
         data_type=data_type,
