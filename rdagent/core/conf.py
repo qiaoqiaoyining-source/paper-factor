@@ -59,6 +59,9 @@ class RDAgentSettings(ExtendedBaseSettings):
     max_output_duplicate_factor_group: int = 20
     max_kmeans_group_number: int = 40
 
+    # project root conf
+    project_path: Path = Path.cwd()
+
     # workspace conf
     workspace_path: Path = Path.cwd() / "git_ignore_folder" / "RD-Agent_workspace"
     workspace_ckp_size_limit: int = 0
@@ -90,6 +93,9 @@ class RDAgentSettings(ExtendedBaseSettings):
 
     initial_fator_library_size: int = 20
 
+    # step timeout (seconds, 0 = no timeout)
+    step_timeout: int = 0
+
     # parallel loop
     step_semaphore: int | dict[str, int] = 1
     """the semaphore for each step;  you can specify a overall semaphore
@@ -106,7 +112,7 @@ class RDAgentSettings(ExtendedBaseSettings):
     subproc_step: bool = False
 
     def is_force_subproc(self) -> bool:
-        return self.subproc_step or self.get_max_parallel() > 1
+        return self.subproc_step or self.multi_proc_n > 1
 
     # Template:
     app_tpl: str | None = None  # for application to override the default template, example: "app/fintune/tpl"

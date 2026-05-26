@@ -62,6 +62,10 @@ class LoopMeta(type):
         Returns:
             LoopMeta: A new instance of LoopMeta.
         """
+        # If steps is explicitly set in this class, use it directly
+        if "steps" in attrs and isinstance(attrs["steps"], list):
+            return super().__new__(mcs, clsname, bases, attrs)
+
         steps = LoopMeta._get_steps(bases)  # all the base classes of parents
         for name, attr in attrs.items():
             if not name.startswith("_") and callable(attr) and not isinstance(attr, type):
@@ -133,6 +137,9 @@ class LoopBase:
         self.step_n: Optional[int] = None  # remain step count
 
         self.semaphores: dict[str, asyncio.Semaphore] = {}
+
+        # Persistent thread pool for force_subproc steps (avoids per-step pool creation overhead)
+        self._thread_pool: concurrent.futures.ThreadPoolExecutor | None = None
 
     def get_unfinished_loop_cnt(self, next_loop: int) -> int:
         n = 0
@@ -226,26 +233,45 @@ class LoopBase:
                 self.loop_prev_out[li][self.LOOP_IDX_KEY] = li
 
                 try:
-                    # Call function with current loop's output, await if coroutine or use ProcessPoolExecutor for sync if required
+                    # Call function with current loop's output, await if coroutine or use thread pool for sync if required
                     if force_subproc:
                         curr_loop = asyncio.get_running_loop()
-                        with concurrent.futures.ProcessPoolExecutor() as pool:
-                            # Using deepcopy is to avoid triggering errors like "RuntimeError: dictionary changed size during iteration"
-                            # GUESS: Some content in self.loop_prev_out[li] may be in the middle of being changed.
-                            result = await curr_loop.run_in_executor(
-                                pool, copy.deepcopy(func), copy.deepcopy(self.loop_prev_out[li])
+                        if self._thread_pool is None:
+                            self._thread_pool = concurrent.futures.ThreadPoolExecutor(
+                                max_workers=RD_AGENT_SETTINGS.get_max_parallel()
                             )
+                        # Use thread pool with shallow copy — threads share memory,
+                        # shallow copy prevents concurrent mutation of the dict itself
+                        coro = curr_loop.run_in_executor(
+                            self._thread_pool, func, copy.copy(self.loop_prev_out[li])
+                        )
                     else:
                         # auto determine whether to run async or sync
                         if asyncio.iscoroutinefunction(func):
-                            result = await func(self.loop_prev_out[li])
+                            coro = func(self.loop_prev_out[li])
                         else:
-                            # Default: run sync function directly
-                            result = func(self.loop_prev_out[li])
+                            # Use thread executor for sync functions to avoid blocking the event loop
+                            curr_loop = asyncio.get_running_loop()
+                            coro = curr_loop.run_in_executor(None, func, self.loop_prev_out[li])
+
+                    timeout = RD_AGENT_SETTINGS.step_timeout
+                    if timeout > 0:
+                        result = await asyncio.wait_for(coro, timeout=timeout)
+                    else:
+                        result = await coro
+
                     # Store result in the nested dictionary
                     self.loop_prev_out[li][name] = result
                 except Exception as e:
-                    if isinstance(e, self.skip_loop_error):
+                    if isinstance(e, asyncio.TimeoutError):
+                        logger.warning(f"Step {name} of loop {li} timed out after {timeout}s, skipping to feedback.")
+                        if "feedback" in self.steps:
+                            next_step_idx = self.steps.index("feedback")
+                        else:
+                            next_step_idx = len(self.steps) - 1
+                        self.loop_prev_out[li][name] = None
+                        self.loop_prev_out[li][self.EXCEPTION_KEY] = TimeoutError(f"Step '{name}' timed out after {timeout}s")
+                    elif isinstance(e, self.skip_loop_error):
                         logger.warning(f"Skip loop {li} due to {e}")
                         if self.skip_loop_error_stepname:
                             next_step_idx = self.steps.index(self.skip_loop_error_stepname)
@@ -529,7 +555,7 @@ class LoopBase:
     def __getstate__(self) -> dict[str, Any]:
         res = {}
         for k, v in self.__dict__.items():
-            if k in ["queue", "semaphores", "_pbar"]:
+            if k in ["queue", "semaphores", "_pbar", "_thread_pool"]:
                 continue
             if isinstance(v, multiprocessing.queues.Queue):  # interaction queues are not picklable
                 continue
@@ -540,6 +566,7 @@ class LoopBase:
         self.__dict__.update(state)
         self.queue = asyncio.Queue()
         self.semaphores = {}
+        self._thread_pool = None
 
 
 def kill_subprocesses() -> None:
