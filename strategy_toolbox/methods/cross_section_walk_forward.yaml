@@ -1,0 +1,28 @@
+id: cross_section_walk_forward
+description: Walk-forward cross-section OLS with optional MA lag features and monthly resample
+method_type: linear
+min_factors: 2
+typical_use: 研报复现：基本面动量、横截面回归类策略（参数由 paper_strategies/*.recipe.json 定义）
+params_schema:
+  resample:
+    type: string
+    enum: [monthly, daily]
+    default: monthly
+  ma_windows:
+    type: array
+    items: integer
+    default: []
+  combination:
+    type: string
+    enum: [multivariate, per_factor_equal]
+    default: multivariate
+  min_cross_section:
+    type: integer
+    default: 20
+  feature_suffix:
+    type: string
+    default: "_MA{w}"
+  expand_signal:
+    type: string
+    enum: [ffill_to_daily, none]
+    default: ffill_to_daily

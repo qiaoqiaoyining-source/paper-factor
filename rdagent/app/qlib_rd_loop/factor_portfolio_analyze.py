@@ -27,7 +27,9 @@ from rdagent.scenarios.qlib.developer.barra_analysis import (
 
 load_dotenv(".env")
 
-FACTOR_OUTPUT_DIR = Path.cwd() / "git_ignore_folder" / "factor_outputs"
+FACTOR_OUTPUT_DIR = Path(
+    os.environ.get("PAPER_FACTOR_OUTPUTS_DIR", str(Path.cwd() / "git_ignore_folder" / "factor_outputs"))
+)
 ANALYSIS_DIR = FACTOR_OUTPUT_DIR / "factor_analysis"
 OPTIMIZATION_DIR = FACTOR_OUTPUT_DIR / "optimization_reports"
 
@@ -330,8 +332,13 @@ def run_post_export_analysis(
         raise RuntimeError(summary.get("message") or "No exported factors to analyze.")
     if with_agent:
         report = run_factor_optimization_agent(summary)
-        print(f"paper_factor: optimization report -> {report['markdown_path']}", flush=True)
-        print(f"paper_factor: optimization input token estimate -> {report.get('input_token_estimate')}", flush=True)
+        print(f"factor_strategy_agent: optimization report -> {report['markdown_path']}", flush=True)
+        try:
+            from rdagent.oai.token_usage import echo_token_usage
+
+            echo_token_usage(label="factor-optimization-agent")
+        except Exception:  # noqa: BLE001
+            pass
         summary["optimization_report"] = report
     return summary
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -14,8 +15,13 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 REMOTE_ROOT = Path("/mnt/remote_e")
-DEST_FULL = ROOT / "git_ignore_folder" / "factor_implementation_source_data"
-DEST_DEBUG = ROOT / "git_ignore_folder" / "factor_implementation_source_data_debug"
+_DEFAULT_FULL = ROOT / "git_ignore_folder" / "factor_implementation_source_data"
+_DEFAULT_DEBUG = ROOT / "git_ignore_folder" / "factor_implementation_source_data_debug"
+_DATA_ROOT = os.environ.get("PAPER_FACTOR_DATA_ROOT", "").strip()
+DEST_FULL = Path(_DATA_ROOT) if _DATA_ROOT else _DEFAULT_FULL
+DEST_DEBUG = Path(os.environ.get("PAPER_FACTOR_DATA_DEBUG_ROOT", "").strip() or _DATA_ROOT) if _DATA_ROOT else _DEFAULT_DEBUG
+if _DATA_ROOT and not os.environ.get("PAPER_FACTOR_DATA_DEBUG_ROOT", "").strip():
+    DEST_DEBUG = DEST_FULL.parent / "factor_implementation_source_data_debug"
 FULL_DAYS = 252
 FULL_INSTRUMENTS = 5000
 DEBUG_DAYS = 60
@@ -141,6 +147,8 @@ def _load_daily(remote_root: Path) -> pd.DataFrame:
 
 
 def _load_minute(remote_root: Path) -> pd.DataFrame:
+    if os.environ.get("SKIP_MINUTE", "").strip().lower() in {"1", "true", "yes", "on"}:
+        raise RuntimeError("SKIP_MINUTE is set")
     candidates = [
         remote_root / "market_minute_daily_new",
     ]
@@ -172,13 +180,22 @@ def _write_h5(df: pd.DataFrame, path: Path) -> None:
 
 
 def _copy_fundamental_dir(remote_root: Path, dest: Path) -> None:
+    """Copy only factor dictionary (xlsx), not the whole 基本面因子 tree (saves E: space)."""
     src = remote_root / "基本面因子"
-    if not src.exists():
-        return
-    target = dest / "基本面因子"
-    if target.exists():
-        shutil.rmtree(target)
-    shutil.copytree(src, target)
+    for name in ("因子汇总.xlsx", "factor_field_schema.xlsx", "factor_field_schema.json"):
+        candidates = [remote_root / name]
+        if src.exists():
+            candidates.append(src / name)
+        for candidate in candidates:
+            if candidate.exists():
+                shutil.copy2(candidate, dest / name)
+                break
+
+
+def _copy_data_readme(remote_root: Path, dest: Path) -> None:
+    readme = remote_root / "数据说明.txt"
+    if readme.exists():
+        shutil.copy2(readme, dest / "数据说明.txt")
 
 
 def main() -> int:
@@ -219,9 +236,7 @@ def main() -> int:
     }
     (DEST_FULL / "remote_data_meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    readme = remote_root / "数据说明.txt"
-    if readme.exists():
-        shutil.copy(readme, DEST_FULL / "数据说明.txt")
+    _copy_data_readme(remote_root, DEST_FULL)
 
     print("Wrote:")
     print(f"  {DEST_FULL / 'daily_pv.h5'}")

@@ -9,6 +9,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from rdagent.scenarios.qlib.developer.barra_instrument_map import (
+    factor_instrument_to_barra_secid,
+    normalize_trade_date,
+)
+
 ROOT = Path.cwd()
 DEFAULT_BARRA_DIR = ROOT / "git_ignore_folder" / "barra_model"
 
@@ -100,7 +105,7 @@ def _normalize_factor_series(factor_df: pd.DataFrame) -> pd.Series:
     series = series.copy()
     series.index = series.index.set_names(["datetime", "instrument"])
     dt = pd.to_datetime(series.index.get_level_values("datetime"))
-    inst = series.index.get_level_values("instrument").astype(str).map(_instrument_to_secid)
+    inst = series.index.get_level_values("instrument").astype(str).map(factor_instrument_to_barra_secid)
     series.index = pd.MultiIndex.from_arrays([dt, inst], names=["datetime", "instrument"])
     series.name = "factor"
     return series.sort_index()
@@ -116,7 +121,7 @@ def _load_exposure_subset(
     usecols = ["secID", "tradeDate", *STYLE_FACTORS]
     chunks: list[pd.DataFrame] = []
     for chunk in pd.read_csv(exposure_path, usecols=usecols, chunksize=250_000, low_memory=False):
-        chunk["tradeDate"] = chunk["tradeDate"].astype(str)
+        chunk["tradeDate"] = chunk["tradeDate"].map(normalize_trade_date)
         chunk["secID"] = chunk["secID"].astype(str)
         filtered = chunk[chunk["secID"].isin(secids) & chunk["tradeDate"].isin(trade_dates)]
         if not filtered.empty:
@@ -169,15 +174,22 @@ def analyze_factor_barra_exposure(
     factor_series = _normalize_factor_series(factor_df)
     secids = set(factor_series.index.get_level_values("instrument").astype(str))
     trade_dates = {
-        pd.Timestamp(dt).strftime("%Y%m%d") for dt in factor_series.index.get_level_values("datetime").unique()
+        normalize_trade_date(dt) for dt in factor_series.index.get_level_values("datetime").unique()
     }
+    trade_dates = {d for d in trade_dates if d}
     exposure = _load_exposure_subset(exposure_path, secids, trade_dates)
     if exposure.empty:
+        sample_secids = sorted(secids)[:5]
+        sample_dates = sorted(trade_dates)[:3] + sorted(trade_dates)[-3:]
         return {
             "status": "unavailable",
             "reason": f"No overlapping Barra exposure rows for model={model}.",
             "barra_model": model,
             "exposure_path": str(exposure_path),
+            "factor_secid_samples": sample_secids,
+            "factor_date_samples": sample_dates,
+            "n_factor_secids": len(secids),
+            "n_factor_dates": len(trade_dates),
         }
 
     merged = pd.concat([factor_series, exposure], axis=1, join="inner").dropna(subset=["factor"])

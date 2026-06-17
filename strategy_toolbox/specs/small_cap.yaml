@@ -1,0 +1,31 @@
+# 小市值多空策略 — 方法一 auto（从工具箱自动选最优）
+name: small_cap_ls
+style: small_cap
+mode: auto
+
+min_sharpe: 0.3
+max_drawdown: 0.35
+max_turnover: 0.95
+min_icir: 0.02
+
+max_factors: 25
+top_frac: 0.2
+bottom_frac: 0.2
+train_frac: 0.7
+data_type: All
+
+# 交易成本（单边综合：佣金+滑点）
+one_way_cost: 0.002          # 千二；改为 0.0025 = 千二点五
+apply_limit_filter: true      # 涨跌停/停牌过滤（简化版）
+limit_up_pct: 0.095
+limit_down_pct: -0.095
+
+factor_source_types:
+  - literature_remote
+  - fundamental_remote
+
+# 留空 = 跑全部方法；也可指定子集
+# methods:
+#   - ic_weighted_linear
+#   - constrained_linear_opt
+#   - gradient_boosting

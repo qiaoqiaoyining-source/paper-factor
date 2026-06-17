@@ -1,0 +1,19 @@
+# 沪深300指增风格 — 遍历所有方法（方法二 sweep）
+name: csi300_enh_sweep
+style: csi300_enh
+mode: sweep
+
+min_sharpe: 0.5
+max_drawdown: 0.25
+max_turnover: 0.85
+min_icir: 0.03
+
+max_factors: 30
+top_frac: 0.15
+bottom_frac: 0.15
+train_frac: 0.7
+data_type: All
+
+factor_source_types:
+  - literature_remote
+  - fundamental_remote

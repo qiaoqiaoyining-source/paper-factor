@@ -1,0 +1,9 @@
+template_id: rank_average
+display_name: 秩平均组合
+description: 已有 toolbox 方法：横截面秩平均
+method_id: rank_average
+default_params: {}
+keywords:
+  - 等权
+  - 秩平均
+  - rank average

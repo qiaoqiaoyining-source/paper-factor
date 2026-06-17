@@ -1,0 +1,19 @@
+# 空气指增（低 Beta / 市场中性倾向）— 指定单一方法示例
+name: air_index_linear
+style: air_index_enh
+mode: single
+method: constrained_linear_opt
+
+min_sharpe: 0.4
+max_drawdown: 0.30
+max_turnover: 0.90
+min_icir: 0.025
+
+max_factors: 20
+top_frac: 0.2
+bottom_frac: 0.2
+train_frac: 0.7
+data_type: All
+
+factor_source_types:
+  - literature_remote

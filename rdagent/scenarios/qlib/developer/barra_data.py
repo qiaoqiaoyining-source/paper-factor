@@ -14,6 +14,7 @@ from rdagent.scenarios.qlib.developer.barra_analysis import (
     STYLE_FACTORS,
     resolve_barra_dir,
 )  # noqa: F401  BARRA_MODEL_FILES used in get_barra_paths
+from rdagent.scenarios.qlib.developer.barra_instrument_map import normalize_trade_date
 
 _META_COLS = {"tradeDate", "updateTime", "factorID", "factorName"}
 
@@ -48,7 +49,7 @@ def factor_return_columns(path: Path) -> list[str]:
 def load_factor_returns(path_str: str) -> pd.DataFrame:
     path = Path(path_str)
     df = pd.read_csv(path, low_memory=False)
-    df["tradeDate"] = df["tradeDate"].astype(str)
+    df["tradeDate"] = df["tradeDate"].map(normalize_trade_date)
     df = df.set_index("tradeDate").sort_index()
     cols = [c for c in df.columns if c not in _META_COLS]
     for col in cols:
@@ -65,7 +66,7 @@ def load_covariance_for_dates(path: Path, trade_dates: Iterable[str]) -> dict[st
     usecols = ["tradeDate", "factorName", *cov_factor_cols]
 
     for chunk in pd.read_csv(path, usecols=usecols, chunksize=100_000, low_memory=False):
-        chunk["tradeDate"] = chunk["tradeDate"].astype(str)
+        chunk["tradeDate"] = chunk["tradeDate"].map(normalize_trade_date)
         chunk = chunk[chunk["tradeDate"].isin(needed)]
         if chunk.empty:
             continue
@@ -91,7 +92,7 @@ def load_specific_return_subset(path: Path, secids: set[str], trade_dates: set[s
         chunksize=250_000,
         low_memory=False,
     ):
-        chunk["tradeDate"] = chunk["tradeDate"].astype(str)
+        chunk["tradeDate"] = chunk["tradeDate"].map(normalize_trade_date)
         chunk["secID"] = chunk["secID"].astype(str)
         filt = chunk[chunk["secID"].isin(secids) & chunk["tradeDate"].isin(trade_dates)]
         if not filt.empty:
@@ -120,7 +121,7 @@ def load_specific_risk_subset(path: Path, secids: set[str], trade_dates: set[str
         chunksize=250_000,
         low_memory=False,
     ):
-        chunk["tradeDate"] = chunk["tradeDate"].astype(str)
+        chunk["tradeDate"] = chunk["tradeDate"].map(normalize_trade_date)
         chunk["secID"] = chunk["secID"].astype(str)
         filt = chunk[chunk["secID"].isin(secids) & chunk["tradeDate"].isin(trade_dates)]
         if not filt.empty:

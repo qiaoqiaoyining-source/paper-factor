@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "description": "StrategySpec fields the agent may patch. Execution primitives live in backtest; agent chooses values.",
+  "knobs": [
+    {
+      "key": "mode",
+      "type": "enum",
+      "enum": ["auto", "single", "sweep"],
+      "description": "auto=sweep+select; single=fast re-run one method; sweep=compare all"
+    },
+    {
+      "key": "method",
+      "type": "string",
+      "description": "When mode=single, which combination method id (see method_catalog.json)"
+    },
+    {
+      "key": "max_factors",
+      "type": "int",
+      "min": 5,
+      "max": 80,
+      "description": "Cap number of factors in the composite signal"
+    },
+    {
+      "key": "min_icir",
+      "type": "float",
+      "min": 0.0,
+      "max": 0.2,
+      "description": "Minimum ICIR to include a factor from profiles"
+    },
+    {
+      "key": "top_frac",
+      "type": "float",
+      "min": 0.05,
+      "max": 0.35,
+      "description": "Long leg cohort size (fraction of universe)"
+    },
+    {
+      "key": "bottom_frac",
+      "type": "float",
+      "min": 0.05,
+      "max": 0.35,
+      "description": "Short leg cohort size"
+    },
+    {
+      "key": "signal_smooth_days",
+      "type": "int",
+      "min": 0,
+      "max": 20,
+      "description": "Rolling mean of signal per stock; reduces turnover and noise (0=off)"
+    },
+    {
+      "key": "hold_buffer_frac",
+      "type": "float",
+      "min": 0.0,
+      "max": 0.15,
+      "description": "Hysteresis band for top/bottom cohorts; keeps names unless rank slips beyond buffer"
+    },
+    {
+      "key": "rebalance_period",
+      "type": "int",
+      "min": 1,
+      "max": 10,
+      "description": "Rebalance every N trading days; >1 lowers turnover"
+    },
+    {
+      "key": "one_way_cost",
+      "type": "float",
+      "min": 0.001,
+      "max": 0.005,
+      "description": "One-way commission+slippage assumption (research only; do not lower to 'fix' net)"
+    },
+    {
+      "key": "max_turnover",
+      "type": "float",
+      "min": 0.2,
+      "max": 2.0,
+      "description": "Constraint target; agent may relax slightly if unattainable after fixes"
+    },
+    {
+      "key": "max_drawdown",
+      "type": "float",
+      "min": 0.1,
+      "max": 0.6,
+      "description": "Max allowed drawdown magnitude (positive number, e.g. 0.35 = 35%)"
+    },
+    {
+      "key": "min_sharpe",
+      "type": "float",
+      "min": -1.0,
+      "max": 3.0,
+      "description": "Minimum net Sharpe constraint"
+    },
+    {
+      "key": "exclude_factors",
+      "type": "list",
+      "description": "Factor names to drop from composite (append via full list in patch)"
+    },
+    {
+      "key": "include_factors",
+      "type": "list",
+      "description": "Force-include specific factor names"
+    },
+    {
+      "key": "methods",
+      "type": "list",
+      "description": "Subset of method ids to sweep (empty = all)"
+    }
+  ]
+}

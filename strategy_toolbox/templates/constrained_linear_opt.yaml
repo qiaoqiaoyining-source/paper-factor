@@ -1,0 +1,9 @@
+template_id: constrained_linear_opt
+display_name: 约束最大 Sharpe 线性配权
+description: 已有 toolbox 方法：约束优化线性配权
+method_id: constrained_linear_opt
+default_params: {}
+keywords:
+  - 约束优化
+  - max sharpe
+  - constrained

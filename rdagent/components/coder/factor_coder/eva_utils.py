@@ -317,7 +317,7 @@ def _get_daily_label_from_data_folder(data_folder: Path) -> pd.Series:
 
 
 def _mean_cross_sectional_ic(factor_df: pd.DataFrame, label: pd.Series) -> float:
-    if factor_df is None or factor_df.empty:
+    if factor_df is None or factor_df.empty:xf
         return float("nan")
     factor_series = pd.to_numeric(factor_df.iloc[:, 0], errors="coerce")
     factor_series.name = "factor"

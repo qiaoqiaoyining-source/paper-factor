@@ -400,10 +400,19 @@ class LiteLLMAPIBackend(APIBackend):
 
         global ACC_COST
         custom_provider = complete_kwargs.get("custom_llm_provider")
+        prompt_tokens = 0
+        completion_tokens = 0
+        if hasattr(response, "usage") and response.usage is not None:
+            u = response.usage
+            prompt_tokens = int(getattr(u, "prompt_tokens", 0) or 0)
+            completion_tokens = int(getattr(u, "completion_tokens", 0) or 0)
+
         if self._uses_openai_compatible_custom_endpoint() or custom_provider == "deepseek":
             cost = np.nan
-            prompt_tokens = self._approx_token_count_from_messages(messages)
-            completion_tokens = max(1, len(content) // 4) if content else 0
+            if not prompt_tokens:
+                prompt_tokens = self._approx_token_count_from_messages(messages)
+            if not completion_tokens:
+                completion_tokens = max(1, len(content) // 4) if content else 0
         else:
             try:
                 cost = completion_cost(model=model_for_stats, messages=messages, completion=content)
@@ -416,13 +425,32 @@ class LiteLLMAPIBackend(APIBackend):
                     logger.info(
                         f"Current Cost: ${float(cost):.10f}; Accumulated Cost: ${float(ACC_COST):.10f}; {finish_reason=}",
                     )
-            try:
-                prompt_tokens = token_counter(model=model_for_stats, messages=messages)
-                completion_tokens = token_counter(model=model_for_stats, text=content)
-            except ValueError as e:
-                logger.warning(f"Token counting failed for model {model_for_stats}: {e}. Skip token statistics.")
-                prompt_tokens = 0
-                completion_tokens = 0
+            if not prompt_tokens or not completion_tokens:
+                try:
+                    if not prompt_tokens:
+                        prompt_tokens = token_counter(model=model_for_stats, messages=messages)
+                    if not completion_tokens:
+                        completion_tokens = token_counter(model=model_for_stats, text=content)
+                except ValueError as e:
+                    logger.warning(f"Token counting failed for model {model_for_stats}: {e}. Skip token statistics.")
+                    if not prompt_tokens:
+                        prompt_tokens = self._approx_token_count_from_messages(messages)
+                    if not completion_tokens:
+                        completion_tokens = max(1, len(content) // 4) if content else 0
+
+        try:
+            from rdagent.oai.token_usage import get_token_session
+
+            cost_val = float(cost) if cost == cost else None
+            get_token_session().record(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                cost=cost_val,
+                model=str(model),
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
         logger.log_object(
             {
                 "model": model,

@@ -1,0 +1,15 @@
+template_id: fundamental_momentum_fir_forecast_combo
+display_name: 基本面隐含收益率（预测组合法）
+description: 单因子 walk-forward 横截面回归后等权平均（财通 FIR 预测组合法）
+method_id: cross_section_walk_forward
+default_params:
+  resample: monthly
+  ma_windows: [0, 1, 4, 8]
+  combination: per_factor_equal
+  min_cross_section: 20
+  expand_signal: ffill_to_daily
+keywords:
+  - fir
+  - 预测组合
+  - forecast combination
+  - 单因子回归

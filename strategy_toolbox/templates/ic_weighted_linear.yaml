@@ -1,0 +1,9 @@
+template_id: ic_weighted_linear
+display_name: ICIR 加权线性组合
+description: 已有 toolbox 方法：ICIR 加权线性组合
+method_id: ic_weighted_linear
+default_params: {}
+keywords:
+  - ic加权
+  - icir
+  - ic weighted

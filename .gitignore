@@ -1,5 +1,5 @@
 .env
-.env.*
+.env.*git status
 !.env.example
 __pycache__/
 *.py[cod]
@@ -17,3 +17,24 @@ release_assets/
 *.zip
 papers/**/*.pdf
 pickle_cache/
+
+# Runtime logs and diagnostic outputs
+*.log
+*.out
+
+# Temporary debugging files
+tmp_*
+_align_diag.*
+
+# Windows reserved artifact
+nul
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local environment files
+.env
+.env.*
+!.env.example
+scripts/debug_walkforward_trace.py

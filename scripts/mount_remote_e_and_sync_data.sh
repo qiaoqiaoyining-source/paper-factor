@@ -3,6 +3,7 @@
 #
 # Usage:
 #   bash scripts/mount_remote_e_and_sync_data.sh check     # ping + port scan (no mount)
+#   bash scripts/mount_remote_e_and_sync_data.sh try       # check + sshfs (password) + SMB fallback
 #   bash scripts/mount_remote_e_and_sync_data.sh mount     # sshfs (needs SSH port 22)
 #   bash scripts/mount_remote_e_and_sync_data.sh list-shares  # smbclient -L (needs REMOTE_PASS)
 #   bash scripts/mount_remote_e_and_sync_data.sh explore
@@ -19,7 +20,7 @@
 set -euo pipefail
 
 REMOTE_USER="${REMOTE_USER:-pc}"
-REMOTE_HOST="${REMOTE_HOST:-192.168.1.254}"
+REMOTE_HOST="${REMOTE_HOST:-192.168.1.13}"
 REMOTE_PATH="${REMOTE_PATH:-/E:}"
 SMB_SHARE="${SMB_SHARE:-}"
 REMOTE_DOMAIN="${REMOTE_DOMAIN:-}"
@@ -91,25 +92,107 @@ _do_check() {
   fi
 }
 
+_install_sshpass() {
+  if ! command -v sshpass >/dev/null 2>&1; then
+    echo "==> Installing sshpass (non-interactive sshfs password)..."
+    sudo apt-get update -qq
+    sudo apt-get install -y sshpass
+  fi
+}
+
+_ssh_port_open() {
+  local p
+  for p in 22 2222 22022; do
+    if _port_open "$REMOTE_HOST" "$p"; then
+      echo "$p"
+      return 0
+    fi
+  done
+  return 1
+}
+
 _do_mount_sshfs() {
   _install_sshfs
-  if ! _port_open "$REMOTE_HOST" 22; then
-    echo "ERROR: port 22 not open on ${REMOTE_HOST}. sshfs cannot work."
-    echo "Run: bash scripts/mount_remote_e_and_sync_data.sh check"
-    echo "Try: bash scripts/mount_remote_e_and_sync_data.sh mount-smb"
-    exit 1
+  local ssh_port
+  ssh_port="$(_ssh_port_open || true)"
+  if [[ -z "$ssh_port" ]]; then
+    echo "ERROR: no SSH port open (tried 22, 2222, 22022) on ${REMOTE_HOST}."
+    echo "Colleague must enable OpenSSH Server on the data PC."
+    return 1
   fi
   sudo mkdir -p "$MOUNT_POINT"
   if mountpoint -q "$MOUNT_POINT" 2>/dev/null; then
     echo "Already mounted: $MOUNT_POINT"
     return 0
   fi
-  echo "==> sshfs ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH} -> ${MOUNT_POINT}"
-  echo "    Type the Windows user password for '${REMOTE_USER}' when prompted (input is hidden)."
-  echo "    If it hangs >30s with no prompt, press Ctrl+C and run 'check' again."
-  sshfs "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}" "$MOUNT_POINT" \
-    -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,follow_symlinks
-  echo "==> Mount OK: ls ${MOUNT_POINT}"
+  local paths=("$REMOTE_PATH")
+  if [[ "$REMOTE_PATH" == "/E:" ]]; then
+    paths+=(/E /E:/ /e:)
+  fi
+  local path
+  for path in "${paths[@]}"; do
+    echo "==> sshfs ${REMOTE_USER}@${REMOTE_HOST}:${path} -> ${MOUNT_POINT} (port ${ssh_port})"
+    if [[ -n "${REMOTE_PASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
+      _install_sshpass
+      if sshpass -p "${REMOTE_PASS}" sshfs "${REMOTE_USER}@${REMOTE_HOST}:${path}" "$MOUNT_POINT" \
+        -p "${ssh_port}" \
+        -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,follow_symlinks,StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null; then
+        echo "==> Mount OK (sshpass): ls ${MOUNT_POINT}"
+        ls -la "$MOUNT_POINT" | head -15
+        return 0
+      fi
+    else
+      echo "    Enter password for '${REMOTE_USER}' when prompted (hidden)."
+      if sshfs "${REMOTE_USER}@${REMOTE_HOST}:${path}" "$MOUNT_POINT" \
+        -p "${ssh_port}" \
+        -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,follow_symlinks; then
+        echo "==> Mount OK: ls ${MOUNT_POINT}"
+        ls -la "$MOUNT_POINT" | head -15
+        return 0
+      fi
+    fi
+    fusermount -u "$MOUNT_POINT" 2>/dev/null || sudo umount "$MOUNT_POINT" 2>/dev/null || true
+  done
+  echo "sshfs failed for all paths: ${paths[*]}"
+  return 1
+}
+
+_do_try() {
+  echo "==> Colleague sshfs recipe + SMB fallback"
+  echo "    Host=${REMOTE_HOST} user=${REMOTE_USER}"
+  export REMOTE_PASS="${REMOTE_PASS:-123456}"
+  _do_check || true
+  echo
+  if _ssh_port_open >/dev/null; then
+    echo "==> SSH port open — trying sshfs (password from REMOTE_PASS)..."
+    _install_sshpass
+    if _do_mount_sshfs; then
+      _do_explore || true
+      echo
+      echo "If you see market_daily_daily_new, run:"
+      echo "  bash scripts/mount_remote_e_and_sync_data.sh sync"
+      return 0
+    fi
+  else
+    echo "==> SSH not available — sshfs cannot work until colleague opens port 22."
+  fi
+  echo
+  echo "==> SMB fallback (list-shares worked before with pc/123456)..."
+  _install_smbclient
+  _do_list_shares || true
+  for share in D '文件备份' E$ E; do
+    export SMB_SHARE="$share"
+    echo "--- try SMB share: $share"
+    if _do_mount_smb; then
+      _do_explore || true
+      find "$MOUNT_POINT" -maxdepth 4 -name 'market_daily_daily_new' 2>/dev/null | head -5 || true
+      echo "Then: bash scripts/mount_remote_e_and_sync_data.sh sync"
+      return 0
+    fi
+    _do_umount || true
+  done
+  echo "All mount attempts failed. Ask colleague to enable OpenSSH (22) and share E: drive."
+  exit 1
 }
 
 _install_smbclient() {
@@ -161,7 +244,7 @@ _do_mount_smb() {
   _install_cifs
   if ! _port_open "$REMOTE_HOST" 445; then
     echo "ERROR: port 445 not open. SMB mount cannot work."
-    exit 1
+    return 1
   fi
   sudo mkdir -p "$MOUNT_POINT"
   if mountpoint -q "$MOUNT_POINT" 2>/dev/null; then
@@ -198,7 +281,7 @@ _do_mount_smb() {
   echo "SMB mount failed (Permission denied)."
   echo "Run: bash scripts/mount_remote_e_and_sync_data.sh list-shares"
   echo "Colleague sshfs needs OpenSSH on port 22 — currently closed; ask them to enable it."
-  exit 1
+  return 1
 }
 
 _do_umount() {
@@ -281,14 +364,15 @@ _do_sync() {
 
 case "$cmd" in
   check) _do_check ;;
-  mount) _do_mount_sshfs ;;
-  mount-smb) _do_mount_smb ;;
+  try) _do_try ;;
+  mount) _do_mount_sshfs || exit 1 ;;
+  mount-smb) _do_mount_smb || exit 1 ;;
   list-shares) _do_list_shares ;;
   umount) _do_umount ;;
   explore) _do_explore ;;
   sync) _do_sync "$@" ;;
   *)
-    echo "Usage: check | mount | mount-smb | list-shares | explore | sync [DIR] | umount"
+    echo "Usage: check | try | mount | mount-smb | list-shares | explore | sync [DIR] | umount"
     exit 1
     ;;
 esac

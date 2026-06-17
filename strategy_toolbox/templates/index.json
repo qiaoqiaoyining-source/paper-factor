@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "description": "Paper strategy templates — map extracted report logic to toolbox methods + params",
+  "templates": [
+    "fundamental_momentum_fir_multivariate.yaml",
+    "fundamental_momentum_fir_forecast_combo.yaml",
+    "cross_section_ols_combo.yaml",
+    "ic_weighted_linear.yaml",
+    "rank_average.yaml",
+    "constrained_linear_opt.yaml"
+  ]
+}

@@ -1,0 +1,10 @@
+template_id: cross_section_ols_combo
+display_name: 横截面 OLS 线性组合
+description: 训练期 pooled 横截面 OLS，对 z-score 因子线性加权
+method_id: cross_section_ols_combo
+default_params: {}
+keywords:
+  - 横截面回归
+  - cross-section
+  - ols
+  - 线性回归

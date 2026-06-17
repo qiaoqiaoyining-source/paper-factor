@@ -15,6 +15,7 @@ from rdagent.scenarios.qlib.developer.barra_analysis import (
     _load_exposure_subset,
     _normalize_factor_series,
 )
+from rdagent.scenarios.qlib.developer.barra_instrument_map import normalize_trade_date
 from rdagent.scenarios.qlib.developer.barra_data import (
     aligned_attribution_factors,
     factor_return_columns,
@@ -117,8 +118,9 @@ def analyze_factor_barra_attribution(
     factor_series = _normalize_factor_series(factor_df)
     secids = set(factor_series.index.get_level_values("instrument").astype(str))
     trade_dates = {
-        pd.Timestamp(dt).strftime("%Y%m%d") for dt in factor_series.index.get_level_values("datetime").unique()
+        normalize_trade_date(dt) for dt in factor_series.index.get_level_values("datetime").unique()
     }
+    trade_dates = {d for d in trade_dates if d}
 
     return_cols = factor_return_columns(paths.factor_return)
     exposure_raw = _load_exposure_subset(paths.exposure, secids, trade_dates)

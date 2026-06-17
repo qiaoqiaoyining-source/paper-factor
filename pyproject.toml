@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "paper-factor"
-version = "0.1.0"
-description = "Standalone paper_factor workflow extracted from RD-Agent."
+name = "factor-strategy-agent"
+version = "0.2.0"
+description = "factor_strategy_agent: papers → factors → strategy toolbox + empirical knowledge base."
 requires-python = ">=3.10"
 dependencies = [
   "azure-ai-formrecognizer",
@@ -35,6 +35,7 @@ dependencies = [
   "requests",
   "rich",
   "scikit-learn",
+  "scipy",
   "tables",
   "tiktoken",
   "tqdm",
@@ -43,11 +44,12 @@ dependencies = [
 ]
 
 [project.scripts]
-start = "paper_factor_cli.main:start_main"
+start = "factor_strategy_agent_cli.main:start_main"
+fsa = "factor_strategy_agent_cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["paper_factor_cli*", "rdagent*"]
+include = ["factor_strategy_agent_cli*", "paper_factor_cli*", "rdagent*"]
 
 [tool.setuptools.package-data]
 rdagent = ["**/*.yaml", "**/*.md", "**/*.txt", "**/Dockerfile"]

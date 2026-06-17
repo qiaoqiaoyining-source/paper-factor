@@ -12,7 +12,7 @@
 set -euo pipefail
 
 REMOTE_USER="${REMOTE_USER:-pc}"
-REMOTE_HOST="${REMOTE_HOST:-192.168.1.254}"
+REMOTE_HOST="${REMOTE_HOST:-192.168.1.13}"
 REMOTE_PASS="${REMOTE_PASS:-}"
 
 cmd="${1:-list}"

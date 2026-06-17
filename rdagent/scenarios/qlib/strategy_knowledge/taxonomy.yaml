@@ -1,0 +1,49 @@
+# Factor × strategy ontology for empirical knowledge base
+
+factor_slices:
+  - id: fundamental:value
+    description: 基本面价值类因子
+    match_tags: [value]
+    match_source_types: [fundamental_remote]
+  - id: fundamental:growth
+    description: 基本面成长类因子
+    match_tags: [growth]
+    match_source_types: [fundamental_remote]
+  - id: fundamental:profitability
+    description: 盈利质量类因子
+    match_tags: [profitability, earnings]
+    match_source_types: [fundamental_remote]
+  - id: fundamental:quality
+    description: 质量类因子
+    match_tags: [quality]
+    match_source_types: [fundamental_remote]
+  - id: fundamental:momentum
+    description: 基本面/价量动量类
+    match_tags: [momentum]
+    match_source_types: [fundamental_remote, literature_remote]
+  - id: literature:general
+    description: 文献提取因子（通用）
+    match_tags: []
+    match_source_types: [literature_remote]
+  - id: mixed:general
+    description: 混合/未分类
+    match_tags: []
+    match_source_types: []
+
+styles:
+  - id: small_cap
+    description: 小市值风格
+  - id: csi300_enh
+    description: 300指增风格
+  - id: neutral
+    description: 全市场中性
+
+strategy_intents:
+  - id: low_turnover
+    description: 低换手、持仓稳定
+  - id: max_sharpe
+    description: 最大化 Sharpe
+  - id: style_tilt
+    description: 风格暴露可控
+  - id: sparse_selection
+    description: 稀疏因子选择
